@@ -22,14 +22,14 @@ int main(int argc, char **argv) {
 class TicTacToe
 {
 public:
-    enum class Symbol
+    enum class Cell
     {
         Empty,
+        Nought,
         Cross,
-        Nought
     };
 
-    enum class Player
+    enum class Symbol
     {
         Cross,
         Nought
@@ -47,23 +47,19 @@ public:
 
     int64_t CellCount() const { return 9; }
 
-    Player CurrentPlayer() const { return m_currentPlayer; }
+    Cell GetCell(int64_t index) const
+    {
+        return m_cells[index];
+    }
 
-    Symbol GetCell(int64_t r, int64_t c)
+    Cell GetCell(int64_t r, int64_t c) const
     {
         return m_cells[rc(r, c)];
     }
 
-    int64_t rc(int64_t r, int64_t c)
+    int64_t rc(int64_t r, int64_t c) const
     {
         return r * 3 + c;
-    }
-
-    Player NextPlayer() const
-    {
-        return m_currentPlayer == Player::Cross
-            ? Player::Nought
-            : Player::Cross;
     }
 
     Symbol NextSymbol() const
@@ -73,14 +69,22 @@ public:
             : Symbol::Cross;
     }
 
-    bool SetCell(int64_t r, int64_t c, Symbol cell)
+    Cell FromSymbol(Symbol symbol) const {
+        return symbol == Symbol::Cross
+            ? Cell::Cross
+            : Cell::Nought;
+    }
+
+    bool SetCell(int64_t r, int64_t c, Symbol symbol)
     {
         if (r < 0 || r > 2 || c < 0 || c > 2) {
             return false;
         }
 
+        const Cell cell = FromSymbol(symbol);
+
         bool wasSet = false;
-        if (GetCell(r, c) == Symbol::Empty)
+        if (GetCell(r, c) == Cell::Empty)
         {
             m_cells[rc(r, c)] = cell;
             wasSet = true;
@@ -92,7 +96,6 @@ public:
             
             if (!GameOver())
             {
-                m_currentPlayer = NextPlayer();
                 m_currentSymbol = NextSymbol();
             }
         }
@@ -100,176 +103,87 @@ public:
         return wasSet;
     }
 
-    State CheckBoard()
+    bool CompleteLine(
+        Symbol symbol, int64_t colStride, int64_t rowStride) const
     {
+        const Cell cell = FromSymbol(symbol);
         for (int64_t r = 0; r < 3; ++r)
         {
-            bool cross = false;
-            bool nought = false;
+            int64_t count = 0;
             for (int64_t c = 0; c < 3; ++c)
             {
-                if (GetCell(r, c) == Symbol::Cross)
-                {
-                    if (!cross && c == 0)
-                    {
-                        cross = true;
-                    }
-                }
-                else
-                {
-                    if (cross)
-                    {
-                        cross = false;
-                    }
-                }
-
-                if (GetCell(r, c) == Symbol::Nought)
-                {
-                    if (!nought && c == 0)
-                    {
-                        nought = true;
-                    }
-                }
-                else
-                {
-                    if (nought)
-                    {
-                        nought = false;
-                    }
-                }
+                count = GetCell(c * colStride + r * rowStride) == cell
+                    ? count + 1
+                    : count;
             }
 
-            if (cross || nought)
+            if (count == 3)
             {
-                return cross ? State::CrossWins : State::NoughtWins;
+                return true;
             }
         }
 
-        for (int64_t c = 0; c < 3; ++c)
+        return false;
+    }
+
+    bool CompleteRow(Symbol symbol) const
+    {
+        return CompleteLine(symbol, 1, 3);
+    }
+
+    bool CompleteColumn(Symbol symbol) const
+    {
+        return CompleteLine(symbol, 3, 1);
+    }
+
+    bool CompleteDiagonalInternal(
+        Symbol symbol, int64_t colStart, int64_t direction) const
+    {
+        const Cell cell = FromSymbol(symbol);
+        
+        int64_t count = 0;
+        for (int64_t c = colStart, r = 0; r < 3; c += direction, ++r)
         {
-            bool cross = false;
-            bool nought = false;
-            for (int64_t r = 0; r < 3; ++r)
-            {
-                if (GetCell(r, c) == Symbol::Cross)
-                {
-                    if (!cross && r == 0)
-                    {
-                        cross = true;
-                    }
-                }
-                else
-                {
-                    if (cross)
-                    {
-                        cross = false;
-                    }
-                }
+            count = GetCell(r, c) == cell
+                ? count + 1
+                : count;
 
-                if (GetCell(r, c) == Symbol::Nought)
-                {
-                    if (!nought && r == 0)
-                    {
-                        nought = true;
-                    }
-                }
-                else
-                {
-                    if (nought)
-                    {
-                        nought = false;
-                    }
-                }
-            }
-
-            if (nought || cross)
+            if (count == 3)
             {
-                return cross ? State::CrossWins : State::NoughtWins;
+                return true;
             }
         }
 
-        {
-            bool cross = false;
-            bool nought = false;
-            for (int64_t c = 0, r = 0; r < 3 && c < 3; ++c, ++r)
-            {
-                if (GetCell(r, c) == Symbol::Cross)
-                {
-                    if (!cross && c == 0)
-                    {
-                        cross = true;
-                    }
-                }
-                else
-                {
-                    if (cross)
-                    {
-                        cross = false;
-                    }
-                }
+        return false;
+    }
 
-                if (GetCell(r, c) == Symbol::Nought)
-                {
-                    if (!nought && c == 0)
-                    {
-                        nought = true;
-                    }
-                }
-                else
-                {
-                    if (nought)
-                    {
-                        nought = false;
-                    }
-                }
-            }
-            
-            if (cross || nought)
-            {
-                return cross ? State::CrossWins : State::NoughtWins;
-            }
+    bool CompleteDiagonal(Symbol symbol) const
+    {
+        const Cell cell = FromSymbol(symbol);
+        
+        if (    CompleteDiagonalInternal(symbol, 0, 1)
+            ||  CompleteDiagonalInternal(symbol, 2, -1))
+        {
+            return true;
         }
 
+            return false;
+    }
+
+    State CheckBoard() const
+    {
+        if (    CompleteRow(Symbol::Cross)
+            ||  CompleteColumn(Symbol::Cross)
+            ||  CompleteDiagonal(Symbol::Cross))
         {
-            bool cross = false;
-            bool nought = false;
-            for (int64_t c = 0, r = 2; r >= 0 && c < 3; ++c, --r)
-            {
-                if (GetCell(r, c) == Symbol::Cross)
-                {
-                    if (!cross && c == 0)
-                    {
-                        cross = true;
-                    }
-                }
-                else
-                {
-                    if (cross)
-                    {
-                        cross = false;
-                    }
-                }
+            return State::CrossWins;
+        }
 
-                if (GetCell(r, c) == Symbol::Nought)
-                {
-                    if (!nought && c == 0)
-                    {
-                        nought = true;
-                    }
-                }
-                else
-                {
-                    if (nought)
-                    {
-                        nought = false;
-                    }
-                }
-            }
-
-            if (cross || nought)
-            {
-                return cross ? State::CrossWins : State::NoughtWins;
-            }
+        if (    CompleteRow(Symbol::Nought)
+            ||  CompleteColumn(Symbol::Nought)
+            ||  CompleteDiagonal(Symbol::Nought))
+        {
+            return State::NoughtWins;
         }
 
         return State::Playing;
@@ -287,7 +201,7 @@ public:
 
     void Reset()
     {
-        memset(m_cells, 0, sizeof(Symbol) * CellCount());
+        memset(m_cells, 0, sizeof(Cell) * CellCount());
         m_state = State::Playing;
     }
 
@@ -297,7 +211,7 @@ public:
         {
             for (int64_t c = 0; c < 3; ++c)
             {
-                printf("%s", GetCell(r, c) != Symbol::Empty ? "[x]" : "[-]");
+                printf("%s", GetCell(r, c) != Cell::Empty ? "[x]" : "[-]");
             }
 
             printf("%s", "\n");
@@ -308,9 +222,8 @@ public:
         return m_currentSymbol;
     }
 
-    Symbol m_cells[9] {};
+    Cell m_cells[9] {};
     State m_state = State::Playing;
-    Player m_currentPlayer = Player::Cross;
     Symbol m_currentSymbol = Symbol::Cross;
 };
 
@@ -347,14 +260,14 @@ TEST_F(TicTacToeFixture, NumberOfCellsIs9)
     EXPECT_THAT(m_ticTacToe->CellCount(), Eq(9));
 }
 
-TEST_F(TicTacToeFixture, PlayerXBeginsGame)
+TEST_F(TicTacToeFixture, CrossBeginsGame)
 {
-    EXPECT_THAT(m_ticTacToe->CurrentPlayer(), Eq(TicTacToe::Player::Cross));
+    EXPECT_THAT(m_ticTacToe->CurrentSymbol(), Eq(TicTacToe::Symbol::Cross));
 }
 
 TEST_F(TicTacToeFixture, ZeroCellIsEmpty)
 {
-    EXPECT_THAT(m_ticTacToe->GetCell(0, 0), Eq(TicTacToe::Symbol::Empty));
+    EXPECT_THAT(m_ticTacToe->GetCell(0, 0), Eq(TicTacToe::Cell::Empty));
 }
 
 TEST_F(TicTacToeFixture, AllCellsAreEmptyAtStart)
@@ -363,7 +276,7 @@ TEST_F(TicTacToeFixture, AllCellsAreEmptyAtStart)
     {
         for (int64_t c = 0; c < 3; ++c)
         {
-            EXPECT_THAT(m_ticTacToe->GetCell(r, c), Eq(TicTacToe::Symbol::Empty));
+            EXPECT_THAT(m_ticTacToe->GetCell(r, c), Eq(TicTacToe::Cell::Empty));
         }
     }
 }
@@ -371,13 +284,13 @@ TEST_F(TicTacToeFixture, AllCellsAreEmptyAtStart)
 TEST_F(TicTacToeFixture, Row1Col1IsSetToNought)
 {
     m_ticTacToe->SetCell(1, 1, TicTacToe::Symbol::Nought);
-    EXPECT_THAT(m_ticTacToe->GetCell(1, 1), Eq(TicTacToe::Symbol::Nought));
+    EXPECT_THAT(m_ticTacToe->GetCell(1, 1), Eq(TicTacToe::Cell::Nought));
 }
 
 TEST_F(TicTacToeFixture, Row1Col2IsSetToCross)
 {
     m_ticTacToe->SetCell(1, 2, TicTacToe::Symbol::Cross);
-    EXPECT_THAT(m_ticTacToe->GetCell(1, 2), Eq(TicTacToe::Symbol::Cross));
+    EXPECT_THAT(m_ticTacToe->GetCell(1, 2), Eq(TicTacToe::Cell::Cross));
 }
 
 TEST_F(TicTacToeFixture, TopRowOfCrossesWinsGame)
@@ -488,7 +401,6 @@ TEST_F(TicTacToeFixture, GameInitiallyNotOver)
 TEST_F(TicTacToeFixture, PlayAlternatesAfterMove)
 {
     m_ticTacToe->SetCell(0, 0, m_ticTacToe->CurrentSymbol());
-    EXPECT_THAT(m_ticTacToe->CurrentPlayer(), Eq(TicTacToe::Player::Nought));
     EXPECT_THAT(m_ticTacToe->CurrentSymbol(), Eq(TicTacToe::Symbol::Nought));
 }
 
@@ -496,7 +408,7 @@ TEST_F(TicTacToeFixture, StartingSymbolIsCorrect)
 {
     EXPECT_THAT(m_ticTacToe->CurrentSymbol(), Eq(TicTacToe::Symbol::Cross));
     m_ticTacToe->SetCell(0, 0, m_ticTacToe->CurrentSymbol());
-    EXPECT_THAT(m_ticTacToe->GetCell(0, 0), Eq(TicTacToe::Symbol::Cross));
+    EXPECT_THAT(m_ticTacToe->GetCell(0, 0), Eq(TicTacToe::Cell::Cross));
 }
 
 TEST_F(TicTacToeFixture, CannotUseSameSquare)
@@ -548,4 +460,10 @@ TEST_F(TicTacToeFixture, CrossesWin)
     
     EXPECT_THAT(m_ticTacToe->GameOver(), Eq(true));
     EXPECT_THAT(m_ticTacToe->CurrentState(), Eq(TicTacToe::State::CrossWins));
+}
+
+TEST_F(TicTacToeFixture, CellFromSymbol)
+{
+    EXPECT_THAT(m_ticTacToe->FromSymbol(TicTacToe::Symbol::Cross), Eq(TicTacToe::Cell::Cross));
+    EXPECT_THAT(m_ticTacToe->FromSymbol(TicTacToe::Symbol::Nought), Eq(TicTacToe::Cell::Nought));
 }
