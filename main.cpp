@@ -3,6 +3,7 @@
 
 #include <memory>
 #include <algorithm>
+#include <cinttypes>
 
 using namespace testing;
 
@@ -11,6 +12,103 @@ int main(int argc, char **argv)
     InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();
 }
+
+enum class Order { Row, Col };
+
+class GridIt
+{
+public:
+    using value_type = int64_t;
+    using difference_type = std::ptrdiff_t;
+    using pointer = int64_t*;
+    using reference = int64_t&;
+    using iterator_category = std::input_iterator_tag;
+
+    GridIt(int64_t w, int64_t h, int64_t r, int64_t c, Order order)
+        : w_(w), h_(h), r_(r), c_(c), order_(order)
+    {
+        if (order_ == Order::Col) {
+            walkDir_ = &GridIt::WalkCol;
+        } else {
+            walkDir_ = &GridIt::WalkRow;
+        }
+
+        distance_ = index();
+    }
+
+    int64_t operator*() const { return index(); }
+    bool operator==(const GridIt& other) const { return distance_ == other.distance_; }
+    bool operator!=(const GridIt& other) const { return !(*this == other); }
+    GridIt operator++(int)
+    {
+        GridIt temp = *this;
+        ++*this;
+        return temp;
+    }
+
+    GridIt& operator++()
+    {
+        ((*this).*walkDir_)();
+        distance_++;
+        return *this;
+    }
+
+private:
+    int64_t index() const
+    {
+        return r_ * w_ + c_;
+    }
+
+    void WalkRow()
+    {
+        c_++;
+        if (c_ >= w_) {
+            r_++;
+            c_ = 0;
+        }
+    }
+
+    void WalkCol()
+    {
+        r_++;
+        if (r_ >= h_) {
+            c_++;
+            r_ = 0;
+        }
+    }
+
+    int64_t Row() const { return r_; }
+    int64_t Col() const { return c_; }
+
+    typedef void (GridIt::*WalkDir)();
+    WalkDir walkDir_;
+
+    int64_t w_;
+    int64_t h_;
+    int64_t r_ = 0;
+    int64_t c_ = 0;
+    int64_t distance_ = 0;
+    Order order_;
+};
+
+class GridCells
+{
+public:
+    GridCells(int64_t width, int64_t height, Order order)
+        : width_(width), height_(height), order_(order) {}
+
+    GridIt begin() { return GridIt{width_, height_, 0, 0, order_}; }
+    GridIt end()
+    {
+        auto endIt = GridIt{width_, height_, width_ - 1, height_ - 1, order_};
+        return ++endIt;
+    }
+
+private:
+    Order order_;
+    int64_t width_;
+    int64_t height_;
+};
 
 class TicTacToe
 {
@@ -110,22 +208,28 @@ public:
     }
 
     bool CompleteLine(
-        Symbol symbol, int64_t colStride, int64_t rowStride) const
+        Symbol symbol, GridCells(*gridCells)()) const
     {
+        int64_t len = 0;
+        int64_t count = 0;
         const Cell cell = FromSymbol(symbol);
-        for (int64_t r = 0; r < Dimension(); ++r)
+        for (int64_t index : gridCells())
         {
-            int64_t count = 0;
-            for (int64_t c = 0; c < Dimension(); ++c)
-            {
-                count = GetCell(c * colStride + r * rowStride) == cell
-                    ? count + 1
-                    : count;
-            }
+            count = GetCell(index) == cell
+                ? count + 1
+                : count;
 
-            if (count == Dimension())
+            if (++len >= Dimension())
             {
-                return true;
+                if (count == Dimension())
+                {
+                    return true;
+                }
+                else
+                {
+                    len = 0;
+                    count = 0;
+                }
             }
         }
 
@@ -134,12 +238,12 @@ public:
 
     bool CompleteRow(Symbol symbol) const
     {
-        return CompleteLine(symbol, 1, Dimension());
+        return CompleteLine(symbol, []() { return GridCells(3, 3, Order::Row); });
     }
 
     bool CompleteColumn(Symbol symbol) const
     {
-        return CompleteLine(symbol, Dimension(), 1);
+        return CompleteLine(symbol, []() { return GridCells(3, 3, Order::Col); });
     }
 
     bool CompleteDiagonal(Symbol symbol) const
