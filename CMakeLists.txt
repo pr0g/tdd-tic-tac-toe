@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.13)
 project(
-    gtest-template LANGUAGES CXX)
+    tic-tac-toe LANGUAGES CXX)
 find_package(
     GTest REQUIRED)
 add_executable(
